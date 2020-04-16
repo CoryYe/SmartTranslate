@@ -47,7 +47,7 @@ def main():
         row['article'] = row['article'].replace(" -rrb-", "")
         row['article'] = row['article'].replace(" -lrb-", "")
         row['article'] = row['article'].replace(" <unk>", "")
-    sample_train = train.sample(16000)
+    sample_train = train.sample(32000)
     sample_val = val.sample(4032)
     print(sample_train.iloc[1])
     #print(sample_val(1))
