@@ -6,6 +6,7 @@ Created on Wed Mar 25 14:07:11 2020
 @author: cory
 """
 import torch
+import nltk
 import torch.nn as nn
 from torchvision.datasets import MNIST
 from torch.utils.data import DataLoader
@@ -18,8 +19,11 @@ from matplotlib import pyplot as plt
 import pandas as pd
 import random 
 import spacy
+#from rouge import Rouge
 import os
 import tqdm
+#from pyrouge import Rouge155
+import rouge
 from lstm import Encoder, Decoder 
 
 
@@ -35,11 +39,14 @@ def word_ids_to_sentence(id_tensor, vocab, join=None):
     
 
 def main():
+    open('predOut.txt', 'w').close()
+    open('refOut.txt', 'w').close()
+
     epochs = 3
     batchSize = 8
     lr = 0.0001
     
-    
+
     #writer = SummaryWriter('./logs')
     #train = pd.read_csv(f'train_sam.csv')
     #train.columns = ["article", "title"]
@@ -92,6 +99,9 @@ def main():
     totLoss = 0
     index  = 0 
     print("Tests")
+    predList = []
+    refList = []
+
     for batch in val_iter:
         #print("test")
         batchS = len(batch)
@@ -114,20 +124,21 @@ def main():
         origSumm = []
         genSumm.append(2)
             
-        for di in range(len(summ)-1):
+        for di in range(len(summ)):
             decoder_output, decoder_context, decoder_hidden, decoder_attention = decoder.forward(decoder_hidden, decoder_context,
                     encoder_outputs, decoder_input)
             topv, topi = decoder_output.topk(1)
             decoder_input = topi.squeeze().detach()
-            loss += criterion(decoder_output, summ[di+1])
+            #loss += criterion(decoder_output, summ[di+1])
             DO = decoder_output.detach().cpu().numpy()
             genSumm.append(np.argmax(DO[0]))
-            origSumm.append(summ[di][0])
+        for i in range(len(summ)):
+            origSumm.append(summ[i][0])
             
             
-        lossAvg = loss.item()/len(summ)
+        #lossAvg = loss.item()/len(summ)
         
-        totLoss+=lossAvg
+        #totLoss+=lossAvg
         encoder_optimizer.zero_grad()
         
         decoder_optimizer.zero_grad()
@@ -143,23 +154,55 @@ def main():
         origSumms.append(origSumm)
         
         originals.append(orig[:,0])
-        print(len(origSumm))
+        #print(len(origSumm))
         genTensorO = torch.IntTensor(origSumms[index])
         genTensor = torch.IntTensor(genSumms[index])
+        #rouge = Rouge()
+
+
         if(batchNum % 1 == 0):
             translatedOrig = word_ids_to_sentence(originals[index],TEXT.vocab,join = ' ')
-            print(translatedOrig)
+            #print(translatedOrig)
             translatedSummO = word_ids_to_sentence(genTensorO,TEXT.vocab,join = ' ')
-            print(translatedSummO)
+            #print(translatedSummO)
             translatedSumm = word_ids_to_sentence(genTensor,TEXT.vocab,join = ' ')
+            #print(translatedSumm)
+
+            #hypothesis = translatedSumm
+            #reference = translatedSummO
+            translatedSummO = str(translatedSummO)
+            translatedSumm = str(translatedSumm)
+            translatedSumm0 = translatedSummO.replace(' <pad>', '')
+            translatedSumm = translatedSumm.replace(' <pad>','')
             print(translatedSumm)
-            with open("/content/drive/My Drive/Summary/summout.txt","a") as myfile:
-                myfile.write(translatedOrig+" , ")
-                myfile.write(translatedSummO+ " , ")
-                myfile.write(translatedSumm+"\n")
+            predList.append(translatedSumm)
+            refList.append(translatedSummO)
+            #scores = rouge.get_scores(hypothesis, reference)
+            #print(scores)
+            #with open("/content/drive/My Drive/Summary/refOut.txt","a") as myfile:
+                #myfile.write(translatedOrig+" , ")
+                #myfile.write(translatedSummO+ "\n")
+                #myfile.write(translatedSumm+"\n")
+            #with open("/content/drive/My Drive/Summary/predOut.txt","a") as myfile:
+                #myfile.write(translatedOrig+" , ")
+                #myfile.write(translatedSummO+ "\n")
         index+=1
                #genSumms = []
-        if batchNum == 1000: 
+        if(batchNum%500==0):
+            #scores = rouge.get_scores(predList, refList, avg=True)
+            evaluator = rouge.Rouge(metrics=['rouge-n', 'rouge-l', 'rouge-w'],
+                           max_n=3,
+                           limit_length=True,
+                           length_limit=100,
+                           length_limit_type='words',
+                           apply_avg=True,
+                           alpha=0.5, # Default F1_score
+                           weight_factor=1.2,
+                           stemming=True)
+            scores = evaluator.get_scores(predList, refList)
+            print(scores)
             break
+
+
 if __name__ == "__main__":
     main()
